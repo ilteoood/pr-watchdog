@@ -47,3 +47,17 @@ The service reads each PR's `mergeable` flag and `mergeable_state` from GitHub:
 - Any other state (e.g. `blocked`, `dirty`, `unstable`, `unknown`) is skipped.
 
 Draft pull requests are always skipped.
+
+## Docker Compose
+
+```yaml
+services:
+  pr-watchdog:
+    image: ghcr.io/ilteoood/pr-watchdog:latest
+    restart: unless-stopped
+    environment:
+      GITHUB_TOKEN: ghp_xxx
+      WATCHED_REPOS: "owner/repo1,owner/repo2"
+      CRON_PATTERN: "0 */5 8-18 * * Mon-Fri *"
+      RUST_LOG: info
+```
