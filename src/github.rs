@@ -328,7 +328,7 @@ fn retry_delay(resp: &reqwest::Response, attempt: u32, base_delay: Duration) -> 
 }
 
 /// Determine whether the authenticated user approved the pull request.
-pub fn user_approved(reviews:&[Review], login: &str) -> bool {
+pub fn user_approved(reviews: &[Review], login: &str) -> bool {
     // The latest review state per user wins; iterate in order and track.
     let mut approved = false;
     for review in reviews {
@@ -363,4 +363,3 @@ async fn ensure_success(resp: reqwest::Response) -> Result<reqwest::Response> {
         "GitHub API request to {url} failed with {status}: {message}"
     ))
 }
-

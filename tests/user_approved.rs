@@ -3,7 +3,9 @@ use pr_watchdog::github::Review;
 use pr_watchdog::github::User;
 
 fn user(login: &str) -> Option<User> {
-    Some(User { login: login.to_string() })
+    Some(User {
+        login: login.to_string(),
+    })
 }
 
 fn review(login: &str, state: &str) -> Review {
@@ -14,7 +16,10 @@ fn review(login: &str, state: &str) -> Review {
 }
 
 fn make_reviews(reviews: &[(&str, &str)]) -> Vec<Review> {
-    reviews.iter().map(|(login, state)| review(login, state)).collect()
+    reviews
+        .iter()
+        .map(|(login, state)| review(login, state))
+        .collect()
 }
 
 #[test]
@@ -31,39 +36,27 @@ fn user_approved_only_comments() {
 #[test]
 fn user_approved_multiple_reviews_takes_latest_approved() {
     // Alice first commented, then approved — latest state wins
-    let reviews = make_reviews(&[
-        ("alice", "COMMENTED"),
-        ("alice", "APPROVED"),
-    ]);
+    let reviews = make_reviews(&[("alice", "COMMENTED"), ("alice", "APPROVED")]);
     assert!(user_approved(&reviews, "alice"));
 }
 
 #[test]
 fn user_approved_changes_requested_after_approved() {
     // Alice approved then requested changes — approved is overridden
-    let reviews = make_reviews(&[
-        ("alice", "APPROVED"),
-        ("alice", "CHANGES_REQUESTED"),
-    ]);
+    let reviews = make_reviews(&[("alice", "APPROVED"), ("alice", "CHANGES_REQUESTED")]);
     assert!(!user_approved(&reviews, "alice"));
 }
 
 #[test]
 fn user_approved_dismissed_after_approved() {
-    let reviews = make_reviews(&[
-        ("alice", "APPROVED"),
-        ("alice", "DISMISSED"),
-    ]);
+    let reviews = make_reviews(&[("alice", "APPROVED"), ("alice", "DISMISSED")]);
     assert!(!user_approved(&reviews, "alice"));
 }
 
 #[test]
 fn user_approved_approved_after_changes_requested() {
     // Later approval wins over earlier changes request
-    let reviews = make_reviews(&[
-        ("alice", "CHANGES_REQUESTED"),
-        ("alice", "APPROVED"),
-    ]);
+    let reviews = make_reviews(&[("alice", "CHANGES_REQUESTED"), ("alice", "APPROVED")]);
     assert!(user_approved(&reviews, "alice"));
 }
 
@@ -93,10 +86,7 @@ fn user_approved_pending_is_ignored() {
 #[test]
 fn user_approved_dismissed_is_ignored_for_other_users() {
     // Dismissed only clears approval for the same user
-    let reviews = make_reviews(&[
-        ("alice", "DISMISSED"),
-        ("bob", "APPROVED"),
-    ]);
+    let reviews = make_reviews(&[("alice", "DISMISSED"), ("bob", "APPROVED")]);
     assert!(!user_approved(&reviews, "alice"));
     assert!(user_approved(&reviews, "bob"));
 }

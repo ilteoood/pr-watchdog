@@ -15,7 +15,9 @@ use github::GitHubClient;
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
 
     let config = Config::from_env()?;
@@ -67,7 +69,10 @@ async fn main() -> Result<()> {
     }
 
     scheduler.add(job).await.context("failed to schedule job")?;
-    scheduler.start().await.context("failed to start scheduler")?;
+    scheduler
+        .start()
+        .await
+        .context("failed to start scheduler")?;
 
     info!("scheduler started; press Ctrl+C to stop");
     tokio::signal::ctrl_c()
