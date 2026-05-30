@@ -5,6 +5,9 @@ edition = "2021"
 description = "Watches GitHub repositories and auto-merges or rebases pull requests on a cron schedule."
 license = "MIT"
 
+[dev-dependencies]
+wiremock = "0.6"
+
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }

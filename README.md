@@ -17,6 +17,7 @@ Everything is configured through environment variables:
 | `GITHUB_TOKEN`  | yes      | Token used to authenticate against the GitHub API (needs repo write access). |
 | `WATCHED_REPOS` | yes      | Comma/space/newline separated list of `owner/repo` to watch.                 |
 | `CRON_PATTERN`  | no       | 7-field cron expression. Defaults to `0 */5 8-18 * * Mon-Fri *`.             |
+| `MERGE_METHOD`  | no       | Merge strategy: `merge`, `squash`, or `rebase`. Defaults to `merge`.         |
 | `RUST_LOG`      | no       | Log verbosity (`info` by default).                                           |
 
 The cron expression has 7 fields: `sec min hour day month day-of-week year`.
@@ -59,5 +60,6 @@ services:
       GITHUB_TOKEN: ghp_xxx
       WATCHED_REPOS: "owner/repo1,owner/repo2"
       CRON_PATTERN: "0 */5 8-18 * * Mon-Fri *"
+      MERGE_METHOD: merge
       RUST_LOG: info
 ```

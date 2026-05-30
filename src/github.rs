@@ -7,10 +7,36 @@ use crate::config::Repo;
 const API_BASE: &str = "https://api.github.com";
 const USER_AGENT: &str = concat!("pr-watchdog/", env!("CARGO_PKG_VERSION"));
 
+/// Merge method used when merging a pull request.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum MergeMethod {
+    #[default]
+    Merge,
+    Squash,
+    Rebase,
+}
+
+impl MergeMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MergeMethod::Merge => "merge",
+            MergeMethod::Squash => "squash",
+            MergeMethod::Rebase => "rebase",
+        }
+    }
+}
+
+impl std::fmt::Display for MergeMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// A thin GitHub REST API client tailored to the watchdog's needs.
 #[derive(Clone)]
 pub struct GitHubClient {
     client: Client,
+    merge_method: MergeMethod,
 }
 
 /// Minimal representation of a pull request from the list endpoint.
@@ -49,7 +75,7 @@ pub struct Review {
 }
 
 impl GitHubClient {
-    pub fn new(token: &str) -> Result<Self> {
+    pub fn new(token: &str, merge_method: MergeMethod) -> Result<Self> {
         let mut headers = header::HeaderMap::new();
         let mut auth = header::HeaderValue::from_str(&format!("Bearer {token}"))
             .context("invalid GITHUB_TOKEN value")?;
@@ -70,7 +96,7 @@ impl GitHubClient {
             .build()
             .context("failed to build HTTP client")?;
 
-        Ok(Self { client })
+        Ok(Self { client, merge_method })
     }
 
     /// Return the login of the authenticated user.
@@ -143,7 +169,7 @@ impl GitHubClient {
         let resp = self
             .client
             .put(&url)
-            .json(&serde_json::json!({ "merge_method": "merge" }))
+            .json(&serde_json::json!({ "merge_method": self.merge_method.as_str() }))
             .send()
             .await?;
         ensure_success(resp).await?;
@@ -169,7 +195,7 @@ impl GitHubClient {
 }
 
 /// Determine whether the authenticated user approved the pull request.
-pub fn user_approved(reviews: &[Review], login: &str) -> bool {
+pub fn user_approved(reviews:&[Review], login: &str) -> bool {
     // The latest review state per user wins; iterate in order and track.
     let mut approved = false;
     for review in reviews {
@@ -204,3 +230,4 @@ async fn ensure_success(resp: reqwest::Response) -> Result<reqwest::Response> {
         "GitHub API request to {url} failed with {status}: {message}"
     ))
 }
+
