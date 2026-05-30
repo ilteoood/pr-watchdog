@@ -1,0 +1,19 @@
+# Build artifacts
+/target
+
+# Version control
+.git
+.gitignore
+
+# CI / tooling
+.github
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
+# Docs and editor cruft
+*.md
+.vscode
+.idea
