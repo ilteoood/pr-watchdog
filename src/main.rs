@@ -34,11 +34,7 @@ async fn main() -> Result<()> {
     );
 
     // Run once immediately so the watchdog acts without waiting for the first tick.
-    if let Err(err) = watcher::run_pass(&client, &config.repos, &me).await {
-        error!(error = %err, "initial watchdog pass failed");
-    }
-
-    let scheduler = JobScheduler::new()
+    let mut scheduler = JobScheduler::new()
         .await
         .context("failed to create scheduler")?;
 
@@ -46,18 +42,29 @@ async fn main() -> Result<()> {
     let repos = Arc::new(config.repos.clone());
     let me = Arc::new(me);
 
-    let job = Job::new_async(config.cron.as_str(), move |_uuid, _lock| {
+    // Build the scheduled job up-front so an invalid CRON_PATTERN fails fast,
+    // before we perform the initial pass.
+    let job = {
         let client = Arc::clone(&client);
         let repos = Arc::clone(&repos);
         let me = Arc::clone(&me);
-        Box::pin(async move {
-            info!("running scheduled watchdog pass");
-            if let Err(err) = watcher::run_pass(&client, &repos, &me).await {
-                error!(error = %err, "watchdog pass failed");
-            }
+        Job::new_async(config.cron.as_str(), move |_uuid, _lock| {
+            let client = Arc::clone(&client);
+            let repos = Arc::clone(&repos);
+            let me = Arc::clone(&me);
+            Box::pin(async move {
+                info!("running scheduled watchdog pass");
+                if let Err(err) = watcher::run_pass(&client, &repos, &me).await {
+                    error!(error = %err, "watchdog pass failed");
+                }
+            })
         })
-    })
-    .with_context(|| format!("invalid CRON_PATTERN '{}'", config.cron))?;
+        .with_context(|| format!("invalid CRON_PATTERN '{}'", config.cron))?
+    };
+
+    if let Err(err) = watcher::run_pass(&client, &repos, &me).await {
+        error!(error = %err, "initial watchdog pass failed");
+    }
 
     scheduler.add(job).await.context("failed to schedule job")?;
     scheduler.start().await.context("failed to start scheduler")?;
@@ -67,6 +74,9 @@ async fn main() -> Result<()> {
         .await
         .context("failed to listen for shutdown signal")?;
     info!("shutting down");
+    if let Err(err) = scheduler.shutdown().await {
+        error!(error = %err, "failed to shut down scheduler cleanly");
+    }
 
     Ok(())
 }
