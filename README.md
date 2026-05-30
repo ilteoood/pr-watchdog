@@ -4,9 +4,11 @@ A small Rust service that watches GitHub repositories and, on a cron schedule:
 
 - **Merges** open pull requests **created by you** that are ready to merge.
 - **Merges** open pull requests **approved by you** that are ready to merge.
-- **Rebases / updates** pull requests that are behind their base branch using
-  GitHub's [update-branch API](https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request-branch)
-  (no local clone is ever performed).
+- **Updates** pull requests that are behind their base branch using GitHub's
+  [update-branch API](https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request-branch)
+  (no local clone is ever performed). This merges the latest base branch into the
+  PR branch; it is not a history-rewriting `git rebase`, regardless of the
+  configured `MERGE_METHOD`.
 
 ## Configuration
 
@@ -24,6 +26,22 @@ The cron expression has 7 fields: `sec min hour day month day-of-week year`.
 The default runs every 5 minutes, between 8am and 6pm, Monday to Friday.
 
 See [.env.example](.env.example) for a template.
+
+### GitHub token permissions
+
+The token in `GITHUB_TOKEN` must be able to read and write pull requests on every
+watched repository:
+
+- **Fine-grained personal access token** (recommended): grant the repositories
+  you want to watch access to these repository permissions:
+  - `Pull requests`: **Read and write** (list/merge PRs and update branches).
+  - `Contents`: **Read and write** (required by the update-branch API).
+  - `Metadata`: **Read-only** (mandatory for all fine-grained tokens).
+- **Classic personal access token**: the `repo` scope covers all of the above
+  (use `public_repo` if you only watch public repositories).
+
+The token must belong to the user whose authored/approved pull requests should be
+merged, since the watchdog resolves "you" from the authenticated user.
 
 ## Running
 
