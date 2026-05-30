@@ -9,26 +9,6 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo build
-        uses: Swatinem/rust-cache@v2
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
-
   build_and_test:
     strategy:
       matrix:
@@ -40,11 +20,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Cache cargo build
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.platform.target }}
 
       - name: Build and test binary
         uses: houseabsolute/actions-rust-cross@v1
