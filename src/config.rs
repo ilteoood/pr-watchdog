@@ -1,5 +1,8 @@
 use anyhow::{anyhow, Result};
 use clap::Parser;
+use std::str::FromStr;
+
+use crate::github::MergeMethod;
 
 /// Runtime configuration sourced entirely from environment variables via clap.
 #[derive(Debug, Clone, Parser)]
@@ -17,6 +20,10 @@ pub struct Config {
     /// 7 fields: `sec min hour day month day-of-week year`.
     #[arg(long, env = "CRON_PATTERN", default_value = "0 */5 8-18 * * Mon-Fri *")]
     pub cron: String,
+
+    /// Merge method to use: `merge`, `squash`, or `rebase`.
+    #[arg(long, env = "MERGE_METHOD", default_value = "merge", value_parser = parse_merge_method)]
+    pub merge_method: MergeMethod,
 }
 
 impl Config {
@@ -87,4 +94,23 @@ fn parse_repos(raw: &str) -> Result<RepoList, String> {
         return Err("no valid repositories provided".to_string());
     }
     Ok(RepoList(repos))
+}
+
+fn parse_merge_method(raw: &str) -> Result<MergeMethod, String> {
+    MergeMethod::from_str(raw)
+}
+
+impl FromStr for MergeMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "merge" => Ok(MergeMethod::Merge),
+            "squash" => Ok(MergeMethod::Squash),
+            "rebase" => Ok(MergeMethod::Rebase),
+            _ => Err(format!(
+                "invalid merge method '{s}', expected 'merge', 'squash', or 'rebase'"
+            )),
+        }
+    }
 }

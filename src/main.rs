@@ -1,6 +1,6 @@
-mod config;
-mod github;
-mod watcher;
+pub mod config;
+pub mod github;
+pub mod watcher;
 
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         .init();
 
     let config = Config::from_env()?;
-    let client = GitHubClient::new(&config.github_token)?;
+    let client = GitHubClient::new(&config.github_token, config.merge_method)?;
 
     let me = client
         .authenticated_login()
@@ -29,6 +29,7 @@ async fn main() -> Result<()> {
     info!(
         repos = config.repos.len(),
         cron = %config.cron,
+        merge_method = %config.merge_method,
         "starting pr-watchdog"
     );
 

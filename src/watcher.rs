@@ -1,5 +1,5 @@
 use anyhow::Result;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::config::Repo;
 use crate::github::{user_approved, GitHubClient};
@@ -52,6 +52,7 @@ async fn process_pull_request(
     if state == "behind" {
         info!(repo = %repo, pr = number, %title, "branch is behind base; updating via GitHub API");
         client.update_branch(repo, number).await?;
+        debug!(repo = %repo, pr = number, "branch updated successfully");
         return Ok(());
     }
 
@@ -80,6 +81,7 @@ async fn process_pull_request(
         let reason = if created_by_me { "created by me" } else { "approved by me" };
         info!(repo = %repo, pr = number, %title, reason, "merging pull request");
         client.merge_pull_request(repo, number).await?;
+        debug!(repo = %repo, pr = number, "pull request merged successfully");
     }
 
     Ok(())
