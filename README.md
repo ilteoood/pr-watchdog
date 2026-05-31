@@ -72,7 +72,7 @@ Draft pull requests are always skipped.
 ```yaml
 services:
   pr-watchdog:
-    image: ghcr.io/ilteoood/pr-watchdog:latest
+    image: ilteoood/pr-watchdog:latest
     restart: unless-stopped
     environment:
       GITHUB_TOKEN: ghp_xxx
