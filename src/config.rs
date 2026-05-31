@@ -114,3 +114,74 @@ impl FromStr for MergeMethod {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(list: &RepoList) -> Vec<String> {
+        list.0.iter().map(|r| r.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_repos_single() {
+        let list = parse_repos("owner/repo").unwrap();
+        assert_eq!(names(&list), vec!["owner/repo"]);
+    }
+
+    #[test]
+    fn parse_repos_mixed_separators() {
+        let list = parse_repos("a/b, c/d\ne/f\tg/h i/j").unwrap();
+        assert_eq!(names(&list), vec!["a/b", "c/d", "e/f", "g/h", "i/j"]);
+    }
+
+    #[test]
+    fn parse_repos_trims_whitespace_around_parts() {
+        let list = parse_repos("  owner/repo  ").unwrap();
+        assert_eq!(names(&list), vec!["owner/repo"]);
+    }
+
+    #[test]
+    fn parse_repos_skips_empty_entries() {
+        let list = parse_repos(",,a/b,, ,c/d,").unwrap();
+        assert_eq!(names(&list), vec!["a/b", "c/d"]);
+    }
+
+    #[test]
+    fn parse_repos_rejects_missing_slash() {
+        assert!(parse_repos("ownerrepo").is_err());
+    }
+
+    #[test]
+    fn parse_repos_rejects_empty_owner_or_name() {
+        assert!(parse_repos("/repo").is_err());
+        assert!(parse_repos("owner/").is_err());
+    }
+
+    #[test]
+    fn parse_repos_rejects_empty_input() {
+        assert!(parse_repos("   ").is_err());
+        assert!(parse_repos("").is_err());
+    }
+
+    #[test]
+    fn parse_merge_method_accepts_known_values() {
+        assert!(matches!(
+            parse_merge_method("merge").unwrap(),
+            MergeMethod::Merge
+        ));
+        assert!(matches!(
+            parse_merge_method("SQUASH").unwrap(),
+            MergeMethod::Squash
+        ));
+        assert!(matches!(
+            parse_merge_method("  Rebase ").unwrap(),
+            MergeMethod::Rebase
+        ));
+    }
+
+    #[test]
+    fn parse_merge_method_rejects_unknown() {
+        assert!(parse_merge_method("fast-forward").is_err());
+    }
+}

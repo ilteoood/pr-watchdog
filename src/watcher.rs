@@ -78,7 +78,11 @@ async fn process_pull_request(
     };
 
     if created_by_me || approved_by_me {
-        let reason = if created_by_me { "created by me" } else { "approved by me" };
+        let reason = if created_by_me {
+            "created by me"
+        } else {
+            "approved by me"
+        };
         info!(repo = %repo, pr = number, %title, reason, "merging pull request");
         client.merge_pull_request(repo, number).await?;
         debug!(repo = %repo, pr = number, "pull request merged successfully");
