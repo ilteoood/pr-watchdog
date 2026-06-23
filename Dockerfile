@@ -15,6 +15,7 @@ ENV RUST_LOG=info
 ENV GITHUB_TOKEN=your-github-token
 ENV WATCHED_REPOS=owner/repo
 ENV CRON_PATTERN="0 */5 8-18 * * Mon-Fri *"
+ENV TZ=UTC
 ENV SSL_CERT_FILE=/usr/local/ssl/ca-certificates.crt
 
 CMD ["./pr-watchdog"]

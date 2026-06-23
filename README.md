@@ -20,10 +20,12 @@ Everything is configured through environment variables:
 | `WATCHED_REPOS` | yes      | Comma/space/newline separated list of `owner/repo` to watch.                 |
 | `CRON_PATTERN`  | no       | 7-field cron expression. Defaults to `0 */5 8-18 * * Mon-Fri *`.             |
 | `MERGE_METHOD`  | no       | Merge strategy: `merge`, `squash`, or `rebase`. Defaults to `merge`.         |
+| `TZ`            | no       | IANA timezone the cron schedule is evaluated in. Defaults to `UTC`.          |
 | `RUST_LOG`      | no       | Log verbosity (`info` by default).                                           |
 
 The cron expression has 7 fields: `sec min hour day month day-of-week year`.
-The default runs every 5 minutes, between 8am and 6pm, Monday to Friday.
+The default runs every 5 minutes, between 8am and 6pm, Monday to Friday,
+evaluated in the timezone given by `TZ` (default `UTC`).
 
 See [.env.example](.env.example) for a template.
 
@@ -78,6 +80,7 @@ services:
       GITHUB_TOKEN: ghp_xxx
       WATCHED_REPOS: "owner/repo1,owner/repo2"
       CRON_PATTERN: "0 */5 8-18 * * Mon-Fri *"
+      TZ: Europe/Rome
       MERGE_METHOD: merge
       RUST_LOG: info
 ```

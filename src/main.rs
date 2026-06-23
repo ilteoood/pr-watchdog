@@ -31,6 +31,7 @@ async fn main() -> Result<()> {
     info!(
         repos = config.repos.len(),
         cron = %config.cron,
+        timezone = %config.tz,
         merge_method = %config.merge_method,
         "starting pr-watchdog"
     );
@@ -47,8 +48,9 @@ async fn main() -> Result<()> {
     let client = Arc::new(client);
     let repos = Arc::new(config.repos.clone());
     let me = Arc::new(me);
+    let tz = config.tz;
 
-    let job = Job::new_async(config.cron.as_str(), move |_uuid, _lock| {
+    let job = Job::new_async_tz(config.cron.as_str(), tz, move |_uuid, _lock| {
         let client = Arc::clone(&client);
         let repos = Arc::clone(&repos);
         let me = Arc::clone(&me);
