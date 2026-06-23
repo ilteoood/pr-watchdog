@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use chrono_tz::Tz;
 use clap::Parser;
 use std::str::FromStr;
 
@@ -24,6 +25,10 @@ pub struct Config {
     /// Merge method to use: `merge`, `squash`, or `rebase`.
     #[arg(long, env = "MERGE_METHOD", default_value = "merge", value_parser = parse_merge_method)]
     pub merge_method: MergeMethod,
+
+    /// IANA timezone the cron schedule is evaluated in (e.g. `UTC`, `Europe/Rome`).
+    #[arg(long, env = "TZ", default_value = "UTC", value_parser = parse_tz)]
+    pub tz: Tz,
 }
 
 impl Config {
@@ -98,6 +103,16 @@ fn parse_repos(raw: &str) -> Result<RepoList, String> {
 
 fn parse_merge_method(raw: &str) -> Result<MergeMethod, String> {
     MergeMethod::from_str(raw)
+}
+
+fn parse_tz(raw: &str) -> Result<Tz, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("TZ must not be empty".to_string());
+    }
+    Tz::from_str(trimmed).map_err(|_| {
+        format!("invalid TZ '{raw}', expected an IANA name like 'UTC' or 'Europe/Rome'")
+    })
 }
 
 impl FromStr for MergeMethod {
@@ -183,5 +198,35 @@ mod tests {
     #[test]
     fn parse_merge_method_rejects_unknown() {
         assert!(parse_merge_method("fast-forward").is_err());
+    }
+
+    #[test]
+    fn parse_tz_accepts_iana_names() {
+        assert!(matches!(parse_tz("UTC").unwrap(), Tz::UTC));
+        assert!(matches!(parse_tz("Europe/Rome").unwrap(), Tz::Europe__Rome));
+        assert!(matches!(
+            parse_tz("America/New_York").unwrap(),
+            Tz::America__New_York
+        ));
+    }
+
+    #[test]
+    fn parse_tz_accepts_iana_names_with_surrounding_whitespace() {
+        assert!(matches!(
+            parse_tz("  Europe/Rome  ").unwrap(),
+            Tz::Europe__Rome
+        ));
+    }
+
+    #[test]
+    fn parse_tz_rejects_empty() {
+        assert!(parse_tz("").is_err());
+        assert!(parse_tz("   ").is_err());
+    }
+
+    #[test]
+    fn parse_tz_rejects_unknown() {
+        assert!(parse_tz("Atlantis").is_err());
+        assert!(parse_tz("Europe/Atlantis").is_err());
     }
 }
