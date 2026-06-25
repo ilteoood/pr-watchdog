@@ -2,7 +2,7 @@ use anyhow::Result;
 use tracing::{debug, info, warn};
 
 use crate::config::Repo;
-use crate::github::{trusted_users_approved, GitHubClient};
+use crate::github::{trusted_users_approved, GitHubClient, PullRequest};
 
 /// Run a single watchdog pass over all configured repositories.
 ///
@@ -32,9 +32,7 @@ async fn process_repo(client: &GitHubClient, repo: &Repo, trusted_logins: &[Stri
         if pr.draft {
             continue;
         }
-        if let Err(err) =
-            process_pull_request(client, repo, pr.number, &pr.title, trusted_logins).await
-        {
+        if let Err(err) = process_pull_request(client, repo, &pr, trusted_logins).await {
             warn!(repo = %repo, pr = pr.number, error = %err, "failed to process pull request");
         }
     }
@@ -44,14 +42,11 @@ async fn process_repo(client: &GitHubClient, repo: &Repo, trusted_logins: &[Stri
 async fn process_pull_request(
     client: &GitHubClient,
     repo: &Repo,
-    number: u64,
-    title: &str,
+    pr: &PullRequest,
     trusted_logins: &[String],
 ) -> Result<()> {
+    let number = pr.number;
     let detail = client.get_pull_request(repo, number).await?;
-    if detail.draft {
-        return Ok(());
-    }
 
     let created_by_trusted = trusted_logins.iter().any(|l| l == &detail.user.login);
     let approved_by_trusted = if created_by_trusted {
@@ -65,7 +60,7 @@ async fn process_pull_request(
         info!(
             repo = %repo,
             pr = number,
-            %title,
+            title = %pr.title,
             author = detail.user.login.as_str(),
             "pull request is not trusted; skipping"
         );
@@ -76,7 +71,12 @@ async fn process_pull_request(
 
     // A PR that is behind its base branch needs to be updated first.
     if state == "behind" {
-        info!(repo = %repo, pr = number, %title, "branch is behind base; updating via GitHub API");
+        info!(
+            repo = %repo,
+            pr = number,
+            title = %pr.title,
+            "branch is behind base; updating via GitHub API"
+        );
         client.update_branch(repo, number).await?;
         debug!(repo = %repo, pr = number, "branch updated successfully");
         return Ok(());
@@ -104,7 +104,7 @@ async fn process_pull_request(
     info!(
         repo = %repo,
         pr = number,
-        %title,
+        title = %pr.title,
         author,
         reason,
         "merging pull request"
