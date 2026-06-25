@@ -2,24 +2,29 @@ use anyhow::Result;
 use tracing::{debug, info, warn};
 
 use crate::config::Repo;
-use crate::github::{user_approved, GitHubClient};
+use crate::github::{trusted_users_approved, GitHubClient};
 
 /// Run a single watchdog pass over all configured repositories.
 ///
 /// For every open pull request:
-/// - if it is created by the authenticated user and ready to merge, merge it;
-/// - if it is approved by the authenticated user and ready to merge, merge it;
+/// - if it was created by a trusted login (the authenticated user or anyone in
+///   `TRUSTED_USERS`) and is ready to merge, merge it;
+/// - if it was approved by a trusted login and is ready to merge, merge it;
 /// - if it is behind its base branch, update it via the GitHub API (no clone).
-pub async fn run_pass(client: &GitHubClient, repos: &[Repo], me: &str) -> Result<()> {
+pub async fn run_pass(
+    client: &GitHubClient,
+    repos: &[Repo],
+    trusted_logins: &[String],
+) -> Result<()> {
     for repo in repos {
-        if let Err(err) = process_repo(client, repo, me).await {
+        if let Err(err) = process_repo(client, repo, trusted_logins).await {
             warn!(repo = %repo, error = %err, "failed to process repository");
         }
     }
     Ok(())
 }
 
-async fn process_repo(client: &GitHubClient, repo: &Repo, me: &str) -> Result<()> {
+async fn process_repo(client: &GitHubClient, repo: &Repo, trusted_logins: &[String]) -> Result<()> {
     let prs = client.list_open_pull_requests(repo).await?;
     info!(repo = %repo, count = prs.len(), "checking open pull requests");
 
@@ -27,7 +32,9 @@ async fn process_repo(client: &GitHubClient, repo: &Repo, me: &str) -> Result<()
         if pr.draft {
             continue;
         }
-        if let Err(err) = process_pull_request(client, repo, pr.number, &pr.title, me).await {
+        if let Err(err) =
+            process_pull_request(client, repo, pr.number, &pr.title, trusted_logins).await
+        {
             warn!(repo = %repo, pr = pr.number, error = %err, "failed to process pull request");
         }
     }
@@ -39,7 +46,7 @@ async fn process_pull_request(
     repo: &Repo,
     number: u64,
     title: &str,
-    me: &str,
+    trusted_logins: &[String],
 ) -> Result<()> {
     let detail = client.get_pull_request(repo, number).await?;
     if detail.draft {
@@ -69,21 +76,29 @@ async fn process_pull_request(
         return Ok(());
     }
 
-    let created_by_me = detail.user.login == me;
-    let approved_by_me = if created_by_me {
+    let created_by_trusted = trusted_logins.iter().any(|l| l == &detail.user.login);
+    let approved_by_trusted = if created_by_trusted {
         false
     } else {
         let reviews = client.list_reviews(repo, number).await?;
-        user_approved(&reviews, me)
+        trusted_users_approved(&reviews, trusted_logins)
     };
 
-    if created_by_me || approved_by_me {
-        let reason = if created_by_me {
-            "created by me"
+    if created_by_trusted || approved_by_trusted {
+        let reason = if created_by_trusted {
+            "created by trusted user"
         } else {
-            "approved by me"
+            "approved by trusted user"
         };
-        info!(repo = %repo, pr = number, %title, reason, "merging pull request");
+        let author = detail.user.login.as_str();
+        info!(
+            repo = %repo,
+            pr = number,
+            %title,
+            author,
+            reason,
+            "merging pull request"
+        );
         client.merge_pull_request(repo, number).await?;
         debug!(repo = %repo, pr = number, "pull request merged successfully");
     }
