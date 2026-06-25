@@ -27,7 +27,12 @@ async fn main() -> Result<()> {
         .authenticated_login()
         .await
         .context("failed to resolve authenticated GitHub user")?;
-    info!(user = %me, "authenticated with GitHub");
+
+    let trusted_logins: Vec<String> = std::iter::once(me.clone())
+        .chain(config.trusted_users.iter().cloned())
+        .collect();
+
+    info!(user = %me, trusted = config.trusted_users.len(), "authenticated with GitHub");
     info!(
         repos = config.repos.len(),
         cron = %config.cron,
@@ -37,7 +42,7 @@ async fn main() -> Result<()> {
     );
 
     // Run once immediately so the watchdog acts without waiting for the first tick.
-    if let Err(err) = watcher::run_pass(&client, &config.repos, &me).await {
+    if let Err(err) = watcher::run_pass(&client, &config.repos, &trusted_logins).await {
         error!(error = %err, "initial watchdog pass failed");
     }
 
@@ -47,16 +52,16 @@ async fn main() -> Result<()> {
 
     let client = Arc::new(client);
     let repos = Arc::new(config.repos.clone());
-    let me = Arc::new(me);
+    let trusted_logins = Arc::new(trusted_logins);
     let tz = config.tz;
 
     let job = Job::new_async_tz(config.cron.as_str(), tz, move |_uuid, _lock| {
         let client = Arc::clone(&client);
         let repos = Arc::clone(&repos);
-        let me = Arc::clone(&me);
+        let trusted_logins = Arc::clone(&trusted_logins);
         Box::pin(async move {
             info!("running scheduled watchdog pass");
-            if let Err(err) = watcher::run_pass(&client, &repos, &me).await {
+            if let Err(err) = watcher::run_pass(&client, &repos, &trusted_logins).await {
                 error!(error = %err, "watchdog pass failed");
             }
         })

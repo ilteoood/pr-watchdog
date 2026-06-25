@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono_tz::Tz;
 use clap::Parser;
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use crate::github::MergeMethod;
@@ -29,6 +30,12 @@ pub struct Config {
     /// IANA timezone the cron schedule is evaluated in (e.g. `UTC`, `Europe/Rome`).
     #[arg(long, env = "TZ", default_value = "UTC", value_parser = parse_tz)]
     pub tz: Tz,
+
+    /// Additional GitHub logins (beyond the authenticated user) whose authored
+    /// or approved pull requests are also eligible to be auto-merged.
+    /// Comma, space, or newline separated.
+    #[arg(long, env = "TRUSTED_USERS", value_parser = parse_trusted_users, default_value = "")]
+    pub trusted_users: TrustedUserList,
 }
 
 impl Config {
@@ -69,6 +76,18 @@ pub struct Repo {
 impl std::fmt::Display for Repo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.owner, self.name)
+    }
+}
+
+/// A deduplicated list of GitHub logins trusted alongside the authenticated user.
+#[derive(Debug, Clone, Default)]
+pub struct TrustedUserList(pub Vec<String>);
+
+impl std::ops::Deref for TrustedUserList {
+    type Target = [String];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -113,6 +132,24 @@ fn parse_tz(raw: &str) -> Result<Tz, String> {
     Tz::from_str(trimmed).map_err(|_| {
         format!("invalid TZ '{raw}', expected an IANA name like 'UTC' or 'Europe/Rome'")
     })
+}
+
+/// Parse a list of GitHub logins separated by commas, whitespace, or newlines.
+/// Duplicates are removed (case-insensitively) while preserving the first
+/// occurrence's original case.
+fn parse_trusted_users(raw: &str) -> Result<TrustedUserList, String> {
+    let mut logins = Vec::new();
+    let mut seen = HashSet::new();
+    for entry in raw.split([',', '\n', ' ', '\t']) {
+        let login = entry.trim();
+        if login.is_empty() {
+            continue;
+        }
+        if seen.insert(login.to_ascii_lowercase()) {
+            logins.push(login.to_string());
+        }
+    }
+    Ok(TrustedUserList(logins))
 }
 
 impl FromStr for MergeMethod {
@@ -228,5 +265,56 @@ mod tests {
     fn parse_tz_rejects_unknown() {
         assert!(parse_tz("Atlantis").is_err());
         assert!(parse_tz("Europe/Atlantis").is_err());
+    }
+
+    #[test]
+    fn parse_trusted_users_empty_is_ok() {
+        let list = parse_trusted_users("").unwrap();
+        assert!(list.0.is_empty());
+    }
+
+    #[test]
+    fn parse_trusted_users_whitespace_only_is_ok() {
+        let list = parse_trusted_users("   ").unwrap();
+        assert!(list.0.is_empty());
+    }
+
+    #[test]
+    fn parse_trusted_users_single() {
+        let list = parse_trusted_users("alice").unwrap();
+        assert_eq!(list.0, vec!["alice".to_string()]);
+    }
+
+    #[test]
+    fn parse_trusted_users_mixed_separators() {
+        let list = parse_trusted_users("alice, bob\ncarol\tdave eve").unwrap();
+        assert_eq!(
+            list.0,
+            vec![
+                "alice".to_string(),
+                "bob".to_string(),
+                "carol".to_string(),
+                "dave".to_string(),
+                "eve".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_trusted_users_trims_whitespace_around_entries() {
+        let list = parse_trusted_users("  alice  ,  bob  ").unwrap();
+        assert_eq!(list.0, vec!["alice".to_string(), "bob".to_string()]);
+    }
+
+    #[test]
+    fn parse_trusted_users_skips_empty_entries() {
+        let list = parse_trusted_users(",,alice,, ,bob,").unwrap();
+        assert_eq!(list.0, vec!["alice".to_string(), "bob".to_string()]);
+    }
+
+    #[test]
+    fn parse_trusted_users_dedupes_preserving_first_case() {
+        let list = parse_trusted_users("alice, Alice, ALICE, bob").unwrap();
+        assert_eq!(list.0, vec!["alice".to_string(), "bob".to_string()]);
     }
 }

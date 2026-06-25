@@ -213,6 +213,15 @@ pub fn user_approved(reviews: &[Review], login: &str) -> bool {
     approved
 }
 
+/// Determine whether any of the given trusted logins approved the pull request.
+/// The latest review state for each login wins, and `CHANGES_REQUESTED` or
+/// `DISMISSED` clears any prior approval by that same login.
+pub fn trusted_users_approved(reviews: &[Review], trusted_logins: &[String]) -> bool {
+    trusted_logins
+        .iter()
+        .any(|login| user_approved(reviews, login))
+}
+
 /// Convert an unsuccessful response into a descriptive error.
 async fn ensure_success(resp: reqwest::Response) -> Result<reqwest::Response> {
     let status = resp.status();
@@ -325,5 +334,46 @@ mod tests {
         let reviews = make_reviews(&[("alice", "DISMISSED"), ("bob", "APPROVED")]);
         assert!(!user_approved(&reviews, "alice"));
         assert!(user_approved(&reviews, "bob"));
+    }
+
+    #[test]
+    fn trusted_users_approved_no_logins() {
+        let reviews = make_reviews(&[("alice", "APPROVED")]);
+        assert!(!trusted_users_approved(&reviews, &[]));
+    }
+
+    #[test]
+    fn trusted_users_approved_any_one_approves() {
+        // Either of the trusted users approving is enough; the other's state is irrelevant.
+        let reviews = make_reviews(&[("alice", "APPROVED"), ("bob", "CHANGES_REQUESTED")]);
+        let trusted = vec!["alice".to_string(), "bob".to_string()];
+        assert!(trusted_users_approved(&reviews, &trusted));
+    }
+
+    #[test]
+    fn trusted_users_approved_changes_requested_after_approved_clears() {
+        // A later CHANGES_REQUESTED from the same trusted user clears their approval.
+        let reviews = make_reviews(&[
+            ("alice", "APPROVED"),
+            ("alice", "CHANGES_REQUESTED"),
+            ("bob", "APPROVED"),
+        ]);
+        let trusted = vec!["alice".to_string(), "bob".to_string()];
+        assert!(trusted_users_approved(&reviews, &trusted));
+    }
+
+    #[test]
+    fn trusted_users_approved_all_changed_or_dismissed() {
+        let reviews = make_reviews(&[("alice", "CHANGES_REQUESTED"), ("bob", "DISMISSED")]);
+        let trusted = vec!["alice".to_string(), "bob".to_string()];
+        assert!(!trusted_users_approved(&reviews, &trusted));
+    }
+
+    #[test]
+    fn trusted_users_approved_ignores_untrusted_reviewers() {
+        // An untrusted user approving does not satisfy the predicate.
+        let reviews = make_reviews(&[("eve", "APPROVED")]);
+        let trusted = vec!["alice".to_string(), "bob".to_string()];
+        assert!(!trusted_users_approved(&reviews, &trusted));
     }
 }
