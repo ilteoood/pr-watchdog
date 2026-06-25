@@ -6,11 +6,11 @@ use crate::github::{trusted_users_approved, GitHubClient};
 
 /// Run a single watchdog pass over all configured repositories.
 ///
-/// For every open pull request:
-/// - if it was created by a trusted login (the authenticated user or anyone in
-///   `TRUSTED_USERS`) and is ready to merge, merge it;
-/// - if it was approved by a trusted login and is ready to merge, merge it;
-/// - if it is behind its base branch, update it via the GitHub API (no clone).
+/// For every open pull request that is either created by a trusted login
+/// (the authenticated user or anyone in `TRUSTED_USERS`) or approved by a
+/// trusted login:
+/// - if it is behind its base branch, update it via the GitHub API (no clone);
+/// - if it is ready to merge, merge it.
 pub async fn run_pass(
     client: &GitHubClient,
     repos: &[Repo],
@@ -53,6 +53,25 @@ async fn process_pull_request(
         return Ok(());
     }
 
+    let created_by_trusted = trusted_logins.iter().any(|l| l == &detail.user.login);
+    let approved_by_trusted = if created_by_trusted {
+        false
+    } else {
+        let reviews = client.list_reviews(repo, number).await?;
+        trusted_users_approved(&reviews, trusted_logins)
+    };
+
+    if !created_by_trusted && !approved_by_trusted {
+        info!(
+            repo = %repo,
+            pr = number,
+            %title,
+            author = detail.user.login.as_str(),
+            "pull request is not trusted; skipping"
+        );
+        return Ok(());
+    }
+
     let state = detail.mergeable_state.as_str();
 
     // A PR that is behind its base branch needs to be updated first.
@@ -76,32 +95,22 @@ async fn process_pull_request(
         return Ok(());
     }
 
-    let created_by_trusted = trusted_logins.iter().any(|l| l == &detail.user.login);
-    let approved_by_trusted = if created_by_trusted {
-        false
+    let reason = if created_by_trusted {
+        "created by trusted user"
     } else {
-        let reviews = client.list_reviews(repo, number).await?;
-        trusted_users_approved(&reviews, trusted_logins)
+        "approved by trusted user"
     };
-
-    if created_by_trusted || approved_by_trusted {
-        let reason = if created_by_trusted {
-            "created by trusted user"
-        } else {
-            "approved by trusted user"
-        };
-        let author = detail.user.login.as_str();
-        info!(
-            repo = %repo,
-            pr = number,
-            %title,
-            author,
-            reason,
-            "merging pull request"
-        );
-        client.merge_pull_request(repo, number).await?;
-        debug!(repo = %repo, pr = number, "pull request merged successfully");
-    }
+    let author = detail.user.login.as_str();
+    info!(
+        repo = %repo,
+        pr = number,
+        %title,
+        author,
+        reason,
+        "merging pull request"
+    );
+    client.merge_pull_request(repo, number).await?;
+    debug!(repo = %repo, pr = number, "pull request merged successfully");
 
     Ok(())
 }
