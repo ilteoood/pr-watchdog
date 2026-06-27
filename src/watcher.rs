@@ -47,6 +47,9 @@ async fn process_pull_request(
 ) -> Result<()> {
     let number = pr.number;
     let detail = client.get_pull_request(repo, number).await?;
+    if detail.draft {
+        return Ok(());
+    }
 
     let created_by_trusted = trusted_logins.iter().any(|l| l == &detail.user.login);
     let approved_by_trusted = if created_by_trusted {
