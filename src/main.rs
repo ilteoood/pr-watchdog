@@ -1,4 +1,5 @@
 pub mod config;
+pub mod dependabot;
 pub mod github;
 pub mod watcher;
 
@@ -42,7 +43,7 @@ async fn main() -> Result<()> {
     );
 
     // Run once immediately so the watchdog acts without waiting for the first tick.
-    if let Err(err) = watcher::run_pass(&client, &config.repos, &trusted_logins).await {
+    if let Err(err) = watcher::run_pass(&client, &config.repos, &me, &trusted_logins).await {
         error!(error = %err, "initial watchdog pass failed");
     }
 
@@ -53,15 +54,17 @@ async fn main() -> Result<()> {
     let client = Arc::new(client);
     let repos = Arc::new(config.repos.clone());
     let trusted_logins = Arc::new(trusted_logins);
+    let me = Arc::new(me);
     let tz = config.tz;
 
     let job = Job::new_async_tz(config.cron.as_str(), tz, move |_uuid, _lock| {
         let client = Arc::clone(&client);
         let repos = Arc::clone(&repos);
         let trusted_logins = Arc::clone(&trusted_logins);
+        let me = Arc::clone(&me);
         Box::pin(async move {
             info!("running scheduled watchdog pass");
-            if let Err(err) = watcher::run_pass(&client, &repos, &trusted_logins).await {
+            if let Err(err) = watcher::run_pass(&client, &repos, &me, &trusted_logins).await {
                 error!(error = %err, "watchdog pass failed");
             }
         })

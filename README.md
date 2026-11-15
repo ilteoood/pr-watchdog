@@ -12,6 +12,9 @@ A small Rust service that watches GitHub repositories and, on a cron schedule:
   (no local clone is ever performed). This merges the latest base branch into the
   PR branch; it is not a history-rewriting `git rebase`, regardless of the
   configured `MERGE_METHOD`.
+- **Unblocks** Dependabot pull requests that conflict with their base branch
+  by commenting `@dependabot rebase`, escalating to `@dependabot recreate` when a
+  rebase was not enough.
 
 ## Configuration
 
@@ -40,7 +43,8 @@ watched repository:
 
 - **Fine-grained personal access token** (recommended): grant the repositories
   you want to watch access to these repository permissions:
-  - `Pull requests`: **Read and write** (list/merge PRs and update branches).
+  - `Pull requests`: **Read and write** (list and merge PRs, update
+    branches, and comment on Dependabot PRs).
   - `Contents`: **Read and write** (required by the update-branch API).
   - `Metadata`: **Read-only** (mandatory for all fine-grained tokens).
 - **Classic personal access token**: the `repo` scope covers all of the above
@@ -80,6 +84,28 @@ The service reads each PR's `mergeable` flag and `mergeable_state` from GitHub:
 - Any other state (e.g. `blocked`, `dirty`, `unstable`, `unknown`) is skipped.
 
 Draft pull requests are always skipped.
+
+## Conflicting Dependabot pull requests
+
+Dependabot pull requests are handled whatever their author's trust: when GitHub
+reports one as conflicting (`mergeable_state == "dirty"`), the watchdog asks
+Dependabot to refresh the branch by commenting on the pull request. It never
+pushes to a Dependabot branch itself, so Dependabot keeps ownership of its
+updates.
+
+The escalation follows what Dependabot actually supports:
+
+1. `@dependabot rebase` — the normal request. It rebases the pull request on its
+   base branch, keeping any commit already on the branch.
+2. `@dependabot recreate` — only after a rebase. This is a forced rebase: it
+   discards the branch and rebuilds it, so it also drops commits added by hand.
+3. Nothing else — once a recreate has been requested and the pull request still
+   conflicts, the watchdog logs it and leaves the pull request to a human.
+
+A pull request that already carries commits Dependabot did not author is never
+sent a recreate, since that would throw those commits away; it is left to a
+human from the start. The escalation state is read back from the watchdog's own
+comments on the pull request, so it survives restarts and needs no storage.
 
 ## Docker Compose
 
