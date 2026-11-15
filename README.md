@@ -65,7 +65,7 @@ returns them — use the canonical lowercase login to be safe.
 
 ```sh
 export GITHUB_TOKEN=ghp_xxx
-export WATCHED_REPOS="HSEIreland/hse-health-app-webportal"
+export WATCHED_REPOS="ilteoood/pr-watchdog"
 export CRON_PATTERN="0 */5 8-18 * * Mon-Fri *"
 
 cargo run --release
