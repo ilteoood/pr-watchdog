@@ -74,6 +74,31 @@ pub struct Review {
     pub state: String,
 }
 
+/// A comment on the pull request's issue timeline.
+#[derive(Debug, Deserialize)]
+pub struct IssueComment {
+    #[serde(default)]
+    pub body: String,
+    pub user: User,
+}
+
+/// A commit reachable from the pull request branch.
+#[derive(Debug, Deserialize)]
+pub struct PullRequestCommit {
+    /// The GitHub account linked to the commit author, when there is one.
+    pub author: Option<User>,
+    pub commit: Commit,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Commit {
+    pub author: Option<GitAuthor>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GitAuthor {
+    pub name: Option<String>,
+}
 impl GitHubClient {
     pub fn new(token: &str, merge_method: MergeMethod) -> Result<Self> {
         let mut headers = header::HeaderMap::new();
@@ -116,27 +141,13 @@ impl GitHubClient {
 
     /// List all open pull requests for a repository, following pagination.
     pub async fn list_open_pull_requests(&self, repo: &Repo) -> Result<Vec<PullRequest>> {
-        let mut all = Vec::new();
-        let mut page = 1u32;
-        loop {
-            let url = format!(
+        self.paginated("pull request list", |page| {
+            format!(
                 "{API_BASE}/repos/{}/{}/pulls?state=open&per_page=100&page={page}",
                 repo.owner, repo.name
-            );
-            let resp = self.client.get(&url).send().await?;
-            let resp = ensure_success(resp).await?;
-            let batch: Vec<PullRequest> = resp
-                .json()
-                .await
-                .context("failed to parse pull request list")?;
-            let len = batch.len();
-            all.extend(batch);
-            if len < 100 {
-                break;
-            }
-            page += 1;
-        }
-        Ok(all)
+            )
+        })
+        .await
     }
 
     /// Fetch detailed information for a single pull request.
@@ -194,6 +205,73 @@ impl GitHubClient {
             .await?;
         ensure_success(resp).await?;
         Ok(())
+    }
+
+    /// List every comment on a pull request's issue timeline, oldest first.
+    pub async fn list_issue_comments(&self, repo: &Repo, number: u64) -> Result<Vec<IssueComment>> {
+        self.paginated("pull request comments", |page| {
+            format!(
+                "{API_BASE}/repos/{}/{}/issues/{number}/comments?per_page=100&page={page}",
+                repo.owner, repo.name
+            )
+        })
+        .await
+    }
+
+    /// List every commit reachable from the pull request branch.
+    pub async fn list_pull_request_commits(
+        &self,
+        repo: &Repo,
+        number: u64,
+    ) -> Result<Vec<PullRequestCommit>> {
+        self.paginated("pull request commits", |page| {
+            format!(
+                "{API_BASE}/repos/{}/{}/pulls/{number}/commits?per_page=100&page={page}",
+                repo.owner, repo.name
+            )
+        })
+        .await
+    }
+
+    /// Post a comment on the pull request's issue timeline.
+    pub async fn create_issue_comment(&self, repo: &Repo, number: u64, body: &str) -> Result<()> {
+        let url = format!(
+            "{API_BASE}/repos/{}/{}/issues/{number}/comments",
+            repo.owner, repo.name
+        );
+        let resp = self
+            .client
+            .post(&url)
+            .json(&serde_json::json!({ "body": body }))
+            .send()
+            .await?;
+        ensure_success(resp).await?;
+        Ok(())
+    }
+
+    /// Collect every page of a list endpoint, stopping at the first partial page.
+    async fn paginated<T: serde::de::DeserializeOwned>(
+        &self,
+        resource: &str,
+        url_for_page: impl Fn(u32) -> String,
+    ) -> Result<Vec<T>> {
+        let mut all = Vec::new();
+        let mut page = 1u32;
+        loop {
+            let resp = self.client.get(url_for_page(page)).send().await?;
+            let resp = ensure_success(resp).await?;
+            let batch: Vec<T> = resp
+                .json()
+                .await
+                .with_context(|| format!("failed to parse {resource} page {page}"))?;
+            let len = batch.len();
+            all.extend(batch);
+            if len < 100 {
+                break;
+            }
+            page += 1;
+        }
+        Ok(all)
     }
 }
 
